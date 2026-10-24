@@ -1,0 +1,302 @@
+openapi: 3.0.3
+info:
+  title: X Growth Assistant local API
+  version: 1.0.0
+  description: |
+    API served by `web/backend/server.py` (Python 3.9+, stdlib only).
+
+    Honesty rule: the X API integration is a stub in this release, so no
+    account data is fetched automatically. Without user-supplied evidence the
+    limit check always returns `status: unknown` with manual-check steps.
+    Confidence is capped at 0.6 because all evidence is user-reported.
+  license:
+    name: MIT
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local server (`python3 web/backend/server.py`)
+
+paths:
+  /api/health:
+    get:
+      summary: Health and X API integration state
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, version, x_api]
+                properties:
+                  ok: { type: boolean, example: true }
+                  version: { type: string, example: "1.0.0" }
+                  x_api:
+                    type: string
+                    enum: [not_configured, not_implemented]
+
+  /api/v1/shadowban-check:
+    get:
+      summary: Alias of GET /api/limit-check (contract from the product spec)
+      parameters:
+        - name: handle
+          in: query
+          required: true
+          description: X handle, with or without "@", or a profile URL.
+          schema: { type: string, example: jack }
+      responses:
+        "200":
+          description: Check result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LimitCheckResult" }
+        "400":
+          description: Missing or malformed handle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/limit-check:
+    get:
+      summary: Limit check without evidence (always returns unknown)
+      parameters:
+        - name: handle
+          in: query
+          required: true
+          description: X handle, with or without "@", or a profile URL.
+          schema: { type: string, example: jack }
+      responses:
+        "200":
+          description: Check result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LimitCheckResult" }
+        "400":
+          description: Missing or malformed handle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+    post:
+      summary: Limit check with user-reported evidence
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LimitCheckRequest" }
+      responses:
+        "200":
+          description: Check result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LimitCheckResult" }
+        "400":
+          description: Missing handle, invalid JSON or invalid evidence types
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/limit-check/schema:
+    get:
+      summary: Accepted evidence fields and status values
+      responses:
+        "200":
+          description: Field descriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  evidence_fields:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        type: { type: string, example: "boolean|null" }
+                        description: { type: string }
+                  statuses:
+                    type: array
+                    items: { $ref: "#/components/schemas/Status" }
+
+  /api/post-review:
+    post:
+      summary: Rule-based pre-posting review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, maxLength: 25000 }
+      responses:
+        "200":
+          description: Review result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostReviewResult" }
+        "400":
+          description: Empty or invalid text
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /api/chat:
+    post:
+      summary: Rule-based chat router (growth, review, limit check, refusals)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, maxLength: 5000 }
+      responses:
+        "200":
+          description: Reply
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [intent, reply]
+                properties:
+                  intent:
+                    type: string
+                    enum: [greeting, growth, post_review, limit_check, refused, password_warning, fallback]
+                  reply: { type: string }
+                  data:
+                    description: Present for post_review and limit_check intents.
+                    oneOf:
+                      - $ref: "#/components/schemas/PostReviewResult"
+                      - $ref: "#/components/schemas/LimitCheckResult"
+        "400":
+          description: Empty message or invalid handle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  schemas:
+    Status:
+      type: string
+      enum: [normal, suspected, limited, unknown]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [missing_handle, invalid_handle, invalid_evidence, invalid_description,
+                     invalid_json, body_too_large, invalid_text, invalid_message,
+                     not_found, method_not_allowed]
+            message: { type: string }
+
+    Evidence:
+      type: object
+      description: |
+        true = observed, false = checked and not observed, null/missing = not checked.
+        Unknown fields are ignored and reported in `warnings`.
+      properties:
+        action_blocked_notice: { type: boolean, nullable: true }
+        captcha_or_temporary_lock: { type: boolean, nullable: true }
+        rate_limit_notice: { type: boolean, nullable: true }
+        button_errors: { type: boolean, nullable: true }
+        followers_only_visibility: { type: boolean, nullable: true }
+        search_visible_logged_out: { type: boolean, nullable: true }
+        replies_hidden_behind_show_more: { type: boolean, nullable: true }
+        impressions_last_7d: { type: integer, minimum: 0, nullable: true }
+        avg_weekly_impressions_prev_4w: { type: integer, minimum: 0, nullable: true }
+        posts_last_7d: { type: integer, minimum: 0, nullable: true }
+        followers: { type: integer, minimum: 0, nullable: true }
+        official_notice_text: { type: string, maxLength: 2000 }
+
+    LimitCheckRequest:
+      type: object
+      required: [handle]
+      properties:
+        handle: { type: string, example: "@jack" }
+        evidence: { $ref: "#/components/schemas/Evidence" }
+        description:
+          type: string
+          maxLength: 4000
+          description: Free text, e.g. a screenshot described in words.
+
+    Signal:
+      type: object
+      required: [id, label, source, observed, weight, detail]
+      properties:
+        id: { type: string, example: followers_only_visibility }
+        label: { type: string }
+        source:
+          type: string
+          enum: [system, user_reported, user_text]
+        observed:
+          type: boolean
+          nullable: true
+          description: true observed, false not observed, null informational / not applicable
+        weight:
+          type: string
+          enum: [strong, moderate, weak, info]
+        detail: { type: string }
+
+    LimitCheckResult:
+      type: object
+      required: [status, signals, checked_at, confidence]
+      properties:
+        status: { $ref: "#/components/schemas/Status" }
+        signals:
+          type: array
+          items: { $ref: "#/components/schemas/Signal" }
+        checked_at: { type: string, format: date-time, example: "2026-10-24T15:40:00Z" }
+        confidence: { type: number, minimum: 0, maximum: 0.6 }
+        handle: { type: string }
+        summary: { type: string }
+        evidence_source:
+          type: string
+          enum: [none, user_reported, user_text, user_reported_and_text]
+        likely_causes: { type: array, items: { type: string } }
+        action_48h: { type: array, items: { type: string } }
+        recheck_interval_hours: { type: integer, enum: [24, 48, 168] }
+        manual_checks: { type: array, items: { type: string } }
+        x_api:
+          type: object
+          properties:
+            state: { type: string, enum: [not_configured, not_implemented] }
+            detail: { type: string }
+        warnings: { type: array, items: { type: string } }
+        disclaimer: { type: string }
+
+    PostReviewResult:
+      type: object
+      required: [verdict, risk, reasons, suggestions]
+      properties:
+        verdict: { type: string, enum: [allowed, revise, do_not_post] }
+        verdict_label: { type: string }
+        risk: { type: string, enum: [low, medium, high] }
+        reasons: { type: array, items: { type: string } }
+        suggestions: { type: array, items: { type: string } }
+        matched:
+          type: array
+          items:
+            type: object
+            properties:
+              category: { type: string }
+              label: { type: string }
+              level: { type: string, enum: [prohibited, sensitive, grey, commercial] }
+              match: { type: string }
+        stats:
+          type: object
+          properties:
+            characters: { type: integer }
+            hashtags: { type: integer }
+            mentions: { type: integer }
+            links: { type: integer }
+            paid_partnership_disclosed: { type: boolean }
+        disclaimer: { type: string }
+
