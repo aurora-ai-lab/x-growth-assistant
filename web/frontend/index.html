@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>X Growth Assistant</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>X Growth Assistant</h1>
+    <p class="tagline">Traffic, content compliance and visibility-limit checks. Runs locally. Never asks for your password.</p>
+    <span id="api-state" class="pill">checking API…</span>
+  </header>
+
+  <main class="layout">
+    <section class="panel chat" aria-label="Chat">
+      <h2>Chat</h2>
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <form id="chat-form" class="chat-form">
+        <input id="chat-input" type="text" autocomplete="off" maxlength="5000"
+               placeholder='Try "how do I grow", "review: …" or "check @handle"' required>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <section class="panel" aria-label="Limit check">
+      <h2>Visibility-limit check</h2>
+      <p class="note">Without an X API key this tool cannot see your account automatically. Fill in what you
+        observed; leave a field on "not checked" if you didn't check it. The status comes only from the server.</p>
+      <form id="limit-form">
+        <label>Handle
+          <input id="handle" name="handle" type="text" placeholder="@yourhandle" maxlength="40">
+        </label>
+
+        <fieldset>
+          <legend>What did you observe?</legend>
+          <div class="tri-grid" id="bool-fields"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Analytics (optional)</legend>
+          <div class="num-grid">
+            <label>Impressions, last 7 days <input type="number" min="0" data-int="impressions_last_7d"></label>
+            <label>Avg weekly impressions, 4 weeks before <input type="number" min="0" data-int="avg_weekly_impressions_prev_4w"></label>
+            <label>Posts + replies, last 7 days <input type="number" min="0" data-int="posts_last_7d"></label>
+            <label>Followers <input type="number" min="0" data-int="followers"></label>
+          </div>
+        </fieldset>
+
+        <label>Exact notice text from X (optional)
+          <textarea id="notice" rows="2" maxlength="2000" placeholder="Copy the wording exactly"></textarea>
+        </label>
+        <label>Describe your screenshot in words (optional)
+          <textarea id="description" rows="2" maxlength="4000" placeholder="e.g. a banner says 'Some of your account features are temporarily limited'"></textarea>
+        </label>
+        <details>
+          <summary>Advanced: paste an evidence JSON report</summary>
+          <textarea id="evidence-json" rows="4" placeholder='{"followers_only_visibility": true, "impressions_last_7d": 12}'></textarea>
+          <p class="note">Fields in the JSON override the form. Accepted fields: <a href="/api/limit-check/schema" target="_blank" rel="noopener">schema</a>.</p>
+        </details>
+        <button type="submit">Run check</button>
+      </form>
+      <div id="limit-result" class="result" hidden></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    Operational advice only, not legal advice. The check can be wrong; official notices from X are the authority.
+    <a href="https://help.x.com/en/rules-and-policies" target="_blank" rel="noopener">X Rules</a>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+
